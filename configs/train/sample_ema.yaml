@@ -1,0 +1,59 @@
+id: sample
+pretrained: null
+seed: 2612
+model_ema: 
+    model_ema_steps: 32
+    model_ema_decay: 0.99998
+model:
+    name: BaseClassifier
+    args:
+        extractor_cfg: 
+            name: ResNetExtractor
+            args:
+                version: resnet18
+        nclasses: 10
+optimizer:
+    name: Adam
+    args:
+        lr: 1.0e-3
+loss:
+    name: CrossEntropyLoss
+    args:
+        label_smoothing: 0.1
+metric:
+    - name: Accuracy
+      args:
+    - name: F1
+      args:
+        nclasses: 10
+scheduler: 
+    name: WarmupLinearCosineAnnealing
+    args:
+        lr_warmup_epochs: 50
+dataset: 
+    train:
+        name: MNISTDataset
+        args:
+            csv_path: data/MNIST/mnist_train.csv
+            is_rgb: True
+        loader:
+            name: DataLoader
+            args:
+                batch_size: 1024
+                shuffle: True
+                pin_memory: True
+    val:
+        name: MNISTDataset
+        args:
+            csv_path: data/MNIST/mnist_test.csv
+            is_rgb: True
+        loader:
+            name: DataLoader
+            args:
+                batch_size: 1024
+                pin_memory: True
+trainer: 
+    nepochs: 6000
+    val_step: 1
+    log_step: 1
+    log_dir: runs
