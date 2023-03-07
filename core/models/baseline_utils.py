@@ -114,12 +114,12 @@ class FixationEncoder(nn.Module):
         )  # torch.Size([1, 400]), last dim is always 1 anyway.
         fix_masks_tril = self.__make_att_mask_for_fixation(
             fix_masks
-        )  # torch.Size([400, 400])
+        )  # torch.Size([bs, 400, 400])
         
-        fix_feature = self.fixation_embedding(fixation)  # torch.Size([1, 400, 512])
-        fix_feature = einops.rearrange(
-            fix_feature, "(b s) l -> b s l", b=1
-        )  # torch.Size([1, 400, 512])
+        fix_feature = self.fixation_embedding(fixation)  # torch.Size([bs, 400, 512])
+        # fix_feature = einops.rearrange(
+        #     fix_feature, "(b s) l -> b s l", b=1
+        # )  # torch.Size([1, 400, 512])
         fix_feature = self.fix_mlp(fix_feature)
         fix_feature_att = self.att_fixation(
             fix_feature, fix_feature, fix_feature, attn_mask=fix_masks_tril
@@ -134,19 +134,33 @@ class FixationEncoder(nn.Module):
     
     def fixation_embedding(self, x):
         x =  self.fixation_embed(x)
-        fix_feature = einops.rearrange(
-            x, "b s l -> (b s) l"
-        )  # torch.Size([400, 512])
+        # fix_feature = einops.rearrange(
+        #     x, "b s l -> (b s) l"
+        # )  # torch.Size([400, 512])
         fix_feature = self.pe(fix_feature)
         return fix_feature
 
     def __make_att_mask_for_fixation(self, fix_masks):
-        # the attention mask final_maskge(fix_masks, 'b x y -> (b x) y') # assume batch always = 1
         tgt_mask = torch.tril(
-            torch.ones(fix_masks.shape[1], fix_masks.shape[1], device=fix_masks.device)
-        )  # [length, length]
-        final_mask = tgt_mask.masked_fill_(fix_masks == 0.0, 0)  # [length, length]
+            torch.ones(
+                fix_masks.shape[0],
+                fix_masks.shape[1],
+                fix_masks.shape[1],
+                device=fix_masks.device,
+            )
+        )  # [num_sent, length, length]
+        masking = vmap(
+            lambda mask1, mask2: mask1.masked_fill_(mask2 == 0.0, 0), in_dims=(0, 0)
+        )
+        # tgt_mask = torch.tril(
+        #     torch.ones(fix_masks.shape[1], fix_masks.shape[1], device=fix_masks.device)
+        # )  # [length, length]
+        # final_mask = tgt_mask.masked_fill_(fix_masks == 0.0, 0)  # [length, length]
+        final_mask = masking(tgt_mask, fix_masks)  # [num_sent, length, length]
         final_mask = (1 - final_mask) * -1e9
+        final_mask = einops.repeat(
+            final_mask, "b s l -> (b n) s l", n=self.config["num_attention_heads"]
+        )  # torch.Size([head*bs, 400, 400]), assume the batchsize include the number of sentences
         # [length, length]
         return final_mask
 
@@ -161,9 +175,9 @@ class FixationEncoderPE2D(FixationEncoder):
         y_axis = x[:, :, 1].long()
         duration = x[:, :, 2]
         x = self.pe(self.fixation_embed_x(x_axis)) + self.pe(self.fixation_embed_y(y_axis)) * duration.unsqueeze(-1)
-        x = einops.rearrange(
-            x, "b s l -> (b s) l"
-        )  # torch.Size([400, 512])
+        # x = einops.rearrange(
+        #     x, "b s l -> (b s) l"
+        # )  # torch.Size([400, 512])
         return x
     
 

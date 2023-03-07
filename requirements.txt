@@ -13,3 +13,5 @@ tensorboard
 neptune-client
 sphinx 
 sphinx_rtd_theme
+functorch
+einops
